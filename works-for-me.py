@@ -1,5 +1,5 @@
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, InlineQueryHandler
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, InlineQueryHandler, CallbackContext
 import sqlite3
 from sqlite3 import Error
 import sys
@@ -50,10 +50,16 @@ async def inline(update: Update, context : ContextTypes.DEFAULT_TYPE):
             id = "FirstOption", 
             title = "First option", 
             input_message_content = InputTextMessageContent("This is a sample survey"), 
-            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Option 1")], [InlineKeyboardButton("Option 2")]])
+            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Option 1", callback_data="1")], [InlineKeyboardButton("Option 2", callback_data="2")]])
             )
     ]
     await context.bot.answer_inline_query(update.inline_query.id, results)
+
+async def inline_button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    d = query.data
+    query.edit_message_text(f"The last selected item was {d}")
+    query.answer()
 
 if __name__ == '__main__':
     token = sys.argv[1]
