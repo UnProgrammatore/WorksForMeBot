@@ -1,5 +1,5 @@
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, InlineQueryHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, InlineQueryHandler, CallbackContext, CallbackQueryHandler
 import sqlite3
 from sqlite3 import Error
 import sys
@@ -58,8 +58,8 @@ async def inline(update: Update, context : ContextTypes.DEFAULT_TYPE):
 async def inline_button(update: Update, context: CallbackContext):
     query = update.callback_query
     d = query.data
-    query.edit_message_text(f"The last selected item was {d}")
-    query.answer()
+    await query.edit_message_text(f"The last selected item was {d}")
+    await query.answer()
 
 if __name__ == '__main__':
     token = sys.argv[1]
@@ -77,5 +77,8 @@ if __name__ == '__main__':
 
     inline_h = InlineQueryHandler(inline)
     app.add_handler(inline_h)
+
+    inline_b = CallbackQueryHandler(inline_button)
+    app.add_handler(inline_b)
     
     app.run_polling()
