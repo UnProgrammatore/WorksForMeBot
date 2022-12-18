@@ -399,3 +399,8 @@ FodyWeavers.xsd
 
 local-notes
 *.db
+
+pyvenv.cfg
+Lib/*
+Scripts/*
+Include/*

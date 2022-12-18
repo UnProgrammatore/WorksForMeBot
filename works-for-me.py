@@ -1,3 +1,4 @@
+from multiprocessing import current_process
 from telegram import CallbackQuery, Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, InlineQueryHandler, CallbackContext, CallbackQueryHandler, Application, filters
 import sqlite3
@@ -5,6 +6,9 @@ from sqlite3 import Error
 import sys
 
 class Repository:
+    ANSWER_NO = 0
+    ANSWER_YES = 1
+    ANSWER_IF_NECESSARY = 2
     dbname: str = None
     def __init__(self, dbname):
         self.dbname = dbname
@@ -31,14 +35,16 @@ class Repository:
         statements = ["""
             CREATE TABLE IF NOT EXISTS plans(
                 creatorUserId INTEGER NOT NULL,
-                question TEXT NOT NULL
+                question TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                creationDate TEXT NOT NULL
             );
             """,
             """
             CREATE TABLE IF NOT EXISTS options(
                 planId INTEGER NOT NULL,
                 option TEXT NOT NULL,
-                FOREIGN KEY (planId) REFERENCES plans (rowid)
+                FOREIGN KEY (planId) REFERENCES plans (rowid) ON DELETE CASCADE
             );
             """,
             """
@@ -47,7 +53,7 @@ class Repository:
                 answeringUserId INTEGER NOT NULL,
                 answeringUserName TEXT NOT NULL,
                 answer INTEGER NOT NULL,
-                FOREIGN KEY (optionId) REFERENCES options (rowid)
+                FOREIGN KEY (optionId) REFERENCES options (rowid) ON DELETE CASCADE
             );
             """]
         for statement in statements:
@@ -87,6 +93,8 @@ class Repository:
             cursor = conn.cursor().execute("INSERT INTO plans (creatorUserId, question) VALUES (?, \"When should we go to the place?\")", (userid,))
             rowid = cursor.lastrowid
             conn.cursor().execute("INSERT INTO options (planId, option) VALUES (?, \"Today\"), (?, \"Tomorrow\")", (rowid,rowid,))
+            optionid = cursor.lastrowid
+            conn.cursor().execute("INSERT INTO answers (optionId, answeringUserId, answeringUserName, answer) VALUES (?, ?, \"UnFigo\", ?), (?, ?, \"UnPuzzone\", ?), (?, ?, \"UnoCheBoh\", ?)", (optionid, userid, Repository.ANSWER_YES, optionid, 0, Repository.ANSWER_NO, optionid, 1, Repository.ANSWER_IF_NECESSARY))
             conn.commit()
         finally:
             conn.close()
@@ -94,6 +102,8 @@ class Repository:
         conn = None
         try:
             conn = self.connect()
+            conn.cursor().execute("DELETE FROM answers WHERE optionId IN (SELECT rowid FROM options WHERE planId = ?)", (planid,))
+            conn.cursor().execute("DELETE FROM options WHERE planId = ?", (planid,))
             conn.cursor().execute("DELETE FROM plans WHERE creatorUserId = ? AND rowid = ?", (userid, planid,))
             conn.commit()
         finally:
@@ -122,6 +132,29 @@ class Repository:
             conn.commit()
         finally:
             conn.close()
+    def get_answers_formatted(self, planid):
+        conn = None
+        try:
+            conn = self.connect()
+            cursor = conn.cursor().execute("""
+            SELECT
+                o.rowid,
+                o.option,
+                GROUP_CONCAT(IIF(a.answer = ?, a.answeringUserName, NULL), ", ") As confirmedPeople,
+                SUM(IIF(a.answer = ?, 1, 0)) As confirmedPeopleNumber,
+                GROUP_CONCAT(IIF(a.answer = ?, a.answeringUserName, NULL), ", ") As maybePeople,
+                SUM(IIF(a.answer = ?, 1, 0)) As maybePeopleNumber
+            FROM
+                options o
+                LEFT JOIN answers a ON o.rowid = a.optionId
+            WHERE
+                o.planId = ?
+            GROUP BY
+                o.rowid
+            """, (Repository.ANSWER_YES, Repository.ANSWER_YES, Repository.ANSWER_IF_NECESSARY, Repository.ANSWER_IF_NECESSARY, planid,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
 
 
 class Bot:
@@ -135,7 +168,9 @@ class Bot:
         plans = self.repo.get_all_plans(update.effective_user.id)
         markup = Bot.make_plan_list_markup(update.effective_user.id, plans)
         await context.bot.send_message(update.effective_chat.id, "Select a plan to manage it", reply_markup=markup)
-
+    async def new_plan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.user_operations[update.effective_user.id] = f'n|{update.effective_user.id}'
+        await context.bot.send_message(update.effective_chat.id, "Ok, send me the name for the plan")
     async def fake(self, update: Update, context : ContextTypes.DEFAULT_TYPE):
         try:
             self.repo.insert_fake_plan(update.effective_user.id)
@@ -156,6 +191,8 @@ class Bot:
                     userid = int(d[1])
                     planid = int(d[2])
                     await self.add_option(update.message.text, update, context, planid)
+                case "n":
+                    userid = int(d[1])
         else:
             await context.bot.send_message(update.effective_chat.id, "I'm sorry, I don't know what you mean")
 
@@ -205,6 +242,14 @@ class Bot:
                 userid = int(d[1])
                 planid = int(d[2])
                 await self.start_add_option(query, userid, planid)
+            case "r":
+                userid = int(d[1])
+                planid = int(d[2])
+                await self.show_results(query, userid, planid)
+            case "rr":
+                userid = int(d[1])
+                planid = int(d[2])
+                await self.show_extended_results(query, userid, planid)
             case _:
                 await query.edit_message_text("We're sorry, there was an error processing your button press")
         await query.answer()
@@ -223,6 +268,21 @@ class Bot:
             ])
         plan = self.repo.get_plan(planid, userid)
         await query.edit_message_text(f'Editing "{plan["question"]}"', reply_markup=reply_markup)
+    async def show_results(self, query: CallbackQuery, userid, planid):
+        plan = self.repo.get_plan(planid, userid)
+        results = self.repo.get_answers_formatted(planid)
+        final_message = f'Here are the results for "{plan["question"]}":'
+        for result in results:
+            final_message += f'\n{result["option"]}: {"✔" * result["confirmedPeopleNumber"]}{"❔" * result["maybePeopleNumber"]}{"None" if result["confirmedPeopleNumber"] + result["maybePeopleNumber"] == 0 else ""}'
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("➕ More info", callback_data=f'rr|{userid}|{planid}')]])
+        await query.edit_message_text(final_message, reply_markup=reply_markup)
+    async def show_extended_results(self, query: CallbackQuery, userid, planid):
+        plan = self.repo.get_plan(planid, userid)
+        results = self.repo.get_answers_formatted(planid)
+        final_message = f'Here are the results for "{plan["question"]}":'
+        for result in results:
+            final_message += f'\n\n{result["option"]}:\n- {"✔ " + result["confirmedPeople"] if result["confirmedPeopleNumber"] > 0 else "No one"} confirmed their availability for this day\n- {"❔ " + result["maybePeople"] if result["maybePeopleNumber"] > 0 else "No one"} said they may be available for this day if strictly necessary'
+        await query.edit_message_text(final_message)
     async def start_add_option(self, query: CallbackQuery, userid, planid):
         self.user_operations[userid] = f"+|{userid}|{planid}"
         plan = self.repo.get_plan(planid, userid)
@@ -271,6 +331,8 @@ class Bot:
         self.app.add_handler(start_h)
         manage_h = CommandHandler('manage', self.start_or_manage)
         self.app.add_handler(manage_h)
+        new_h = CommandHandler('new', self.new_plan)
+        self.app.add_handler(new_h)
         fake_h = CommandHandler('fake', self.fake)
         self.app.add_handler(fake_h)
         inline_h = InlineQueryHandler(self.inline)
