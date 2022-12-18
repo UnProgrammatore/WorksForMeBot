@@ -45,6 +45,7 @@ class Repository:
             CREATE TABLE IF NOT EXISTS answers(
                 optionId INTEGER NOT NULL,
                 answeringUserId INTEGER NOT NULL,
+                answeringUserName TEXT NOT NULL,
                 answer INTEGER NOT NULL,
                 FOREIGN KEY (optionId) REFERENCES options (rowid)
             );
@@ -113,6 +114,14 @@ class Repository:
             conn.commit()
         finally:
             conn.close()
+    def add_option(self, text, planid):
+        conn = None
+        try:
+            conn = self.connect()
+            conn.cursor().execute("INSERT INTO options (planId, option) VALUES (?, ?)", (planid, text,))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 class Bot:
@@ -143,6 +152,10 @@ class Bot:
                     userid = int(d[1])
                     planid = int(d[2])
                     await self.edit_question(update.message.text, update, context, userid, planid)
+                case "+":
+                    userid = int(d[1])
+                    planid = int(d[2])
+                    await self.add_option(update.message.text, update, context, planid)
         else:
             await context.bot.send_message(update.effective_chat.id, "I'm sorry, I don't know what you mean")
 
@@ -188,6 +201,10 @@ class Bot:
                 planid = int(d[1])
                 optionid = int(d[2])
                 await self.remove_option(query, planid, optionid)
+            case "+":
+                userid = int(d[1])
+                planid = int(d[2])
+                await self.start_add_option(query, userid, planid)
             case _:
                 await query.edit_message_text("We're sorry, there was an error processing your button press")
         await query.answer()
@@ -206,6 +223,14 @@ class Bot:
             ])
         plan = self.repo.get_plan(planid, userid)
         await query.edit_message_text(f'Editing "{plan["question"]}"', reply_markup=reply_markup)
+    async def start_add_option(self, query: CallbackQuery, userid, planid):
+        self.user_operations[userid] = f"+|{userid}|{planid}"
+        plan = self.repo.get_plan(planid, userid)
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="c")]])
+        await query.edit_message_text(f'Ok, send me the new option for "{plan["question"]}"', reply_markup=reply_markup)
+    async def add_option(self, text, update: Update, context: ContextTypes.DEFAULT_TYPE, planid):
+        self.repo.add_option(text, planid)
+        await context.bot.send_message(update.effective_chat.id, "Option added")
     async def remove_option(self, query: CallbackQuery, planid, optionid):
         self.repo.remove_option(planid, optionid)
         await query.edit_message_text("Option removed")
