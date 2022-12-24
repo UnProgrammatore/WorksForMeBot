@@ -484,7 +484,8 @@ class Bot:
         await query.edit_message_text(final_message, reply_markup=reply_markup)
     async def show_extended_results(self, query: CallbackQuery, userid, planid):
         plan = self.repo.get_plan(planid)
-        if(userid != int(plan["creatorUserId"])):
+        pressing_user_id = query.from_user.id
+        if(userid != pressing_user_id):
             await query.answer("Only the creator of this plan can show the results", show_alert=True)
             return
         results = self.repo.get_answers_formatted(planid)
