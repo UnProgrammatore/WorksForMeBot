@@ -561,10 +561,11 @@ class Bot:
 if __name__ == '__main__':
     token = sys.argv[1]
     dbname = sys.argv[2] if len(sys.argv) > 2 else "data.db"
+    botname = sys.argv[3] if len(sys.argv) > 3 else "WorksForMeBot"
     repository = Repository(dbname)
     try:
         repository.create_database()
     except Error as e:
         print(e)
         sys.exit(1)
-    bot = Bot(token=token, repository=repository, bot_name="WorksForMeBot").start()
+    bot = Bot(token=token, repository=repository, bot_name=botname).start()

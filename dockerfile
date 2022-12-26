@@ -9,4 +9,7 @@ ADD works-for-me.py /
 WORKDIR /data
 WORKDIR /
 
-CMD ["python", "/works-for_me.py", "$BOT_TOKEN", "/data/data.db"]
+ADD run.sh /
+RUN chmod 111 /run.sh
+
+ENTRYPOINT ["/run.sh"]
