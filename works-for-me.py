@@ -159,18 +159,6 @@ class Repository:
             return cursor.fetchall()
         finally:
             conn.close()
-    def insert_fake_plan(self, userid):
-        conn = None
-        try:
-            conn = self.connect()
-            cursor = conn.cursor().execute("INSERT INTO plans (creatorUserId, question, enabled, creationDate) VALUES (?, \"When should we go to the place?\", 1, \"2022-01-01\")", (userid,))
-            rowid = cursor.lastrowid
-            conn.cursor().execute("INSERT INTO options (planId, option) VALUES (?, \"Today\"), (?, \"Tomorrow\")", (rowid,rowid,))
-            optionid = cursor.lastrowid
-            conn.cursor().execute("INSERT INTO answers (optionId, answeringUserId, answeringUserName, answer) VALUES (?, ?, \"UnFigo\", ?), (?, ?, \"UnPuzzone\", ?), (?, ?, \"UnoCheBoh\", ?)", (optionid, userid, Repository.ANSWER_YES, optionid, 0, Repository.ANSWER_NO, optionid, 1, Repository.ANSWER_IF_NECESSARY))
-            conn.commit()
-        finally:
-            conn.close()
     def start_plan_creation(self, title, userid):
         conn = None
         try:
@@ -312,12 +300,6 @@ class Bot:
     async def new_plan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         self.user_operations[update.effective_user.id] = f'n|{update.effective_user.id}'
         await context.bot.send_message(update.effective_chat.id, "Ok, send me the name for the plan")
-    async def fake(self, update: Update, context : ContextTypes.DEFAULT_TYPE):
-        try:
-            self.repo.insert_fake_plan(update.effective_user.id)
-            await context.bot.send_message(update.effective_chat.id, "Fake entry created")
-        except Exception as e:
-            await context.bot.send_message(update.effective_chat.id, f"Failed to create fake entry: {e}")
     async def done_inserting_options(self, update: Update, context: ContextTypes.DEFAULT_TYPE, planid):
         self.repo.plan_ready(planid)
         await context.bot.send_message(update.effective_chat.id, f"Great! Your plan is ready! You can now send it to whoever you want by writing @{self.bot_name} and selecting this plan")
@@ -545,8 +527,6 @@ class Bot:
         self.app.add_handler(new_h)
         done_h = CommandHandler('done', self.done)
         self.app.add_handler(done_h)
-        fake_h = CommandHandler('fake', self.fake)
-        self.app.add_handler(fake_h)
         inline_h = InlineQueryHandler(self.inline)
         self.app.add_handler(inline_h)
         inline_b = CallbackQueryHandler(self.inline_button)
