@@ -36,6 +36,7 @@ class Repository:
     def ensure_tables_existance(conn):
         statements = ["""
             CREATE TABLE IF NOT EXISTS plans(
+                rowid INTEGER PRIMARY KEY AUTOINCREMENT,
                 creatorUserId INTEGER NOT NULL,
                 question TEXT NOT NULL,
                 enabled INTEGER NOT NULL,
@@ -44,6 +45,7 @@ class Repository:
             """,
             """
             CREATE TABLE IF NOT EXISTS options(
+                rowid INTEGER PRIMARY KEY AUTOINCREMENT,
                 planId INTEGER NOT NULL,
                 option TEXT NOT NULL,
                 FOREIGN KEY (planId) REFERENCES plans (rowid) ON DELETE CASCADE
@@ -51,6 +53,7 @@ class Repository:
             """,
             """
             CREATE TABLE IF NOT EXISTS answers(
+                rowid INTEGER PRIMARY KEY AUTOINCREMENT,
                 optionId INTEGER NOT NULL,
                 answeringUserId INTEGER NOT NULL,
                 answeringUserName TEXT NOT NULL,
