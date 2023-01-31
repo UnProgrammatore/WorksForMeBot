@@ -2,6 +2,7 @@ from multiprocessing import current_process
 from telegram import CallbackQuery, Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, InlineQueryHandler, CallbackContext, CallbackQueryHandler, Application, filters
 import sqlite3
+from asyncio import sleep
 from sqlite3 import Error
 import sys
 from datetime import datetime, timezone
@@ -260,7 +261,11 @@ class Bot:
         def maybePeopleNumber(el):
             return int(el["maybePeopleNumber"])
         option_selector_list = list(map(lambda x: [InlineKeyboardButton(f'{str(x["option"])}{f" ✔*{confirmedPeopleNumber(x)}" if confirmedPeopleNumber(x) > 0 else ""}{f" ❔*{maybePeopleNumber(x)}" if maybePeopleNumber(x) > 0 else ""}', callback_data = f"v|{planid}|{x['rowid']}")], options))
-        option_selector_list.append([InlineKeyboardButton("ℹ️ Show full results", callback_data = f"rrv|{userid}|{planid}")])
+        option_selector_list.append(
+            [
+                InlineKeyboardButton("ℹ️ Show full results", callback_data = f"rrv|{userid}|{planid}"),
+                InlineKeyboardButton("🔄 Refresh", callback_data = f"sr|{planid}")
+            ])
         return InlineKeyboardMarkup(option_selector_list)
     @staticmethod
     def make_plan_list_expandable_inline_markup(plans):
@@ -356,7 +361,13 @@ class Bot:
         plans = self.repo.get_all_plans_filtered(userid, query.strip(), 10)
         results = Bot.make_plan_list_expandable_inline_markup(plans)
         await context.bot.answer_inline_query(update.inline_query.id, results, switch_pm_text="Manage your plans or create a new one", switch_pm_parameter="manage", cache_time=0)
-    async def start_poll(self, query: CallbackQuery, planid):
+    async def start_poll(self, query: CallbackQuery, planid, refreshGuard = False):
+        # refreshGuard accounts for the fact that I can't edit a message without changing it.
+        # Since checking for changes would require a significant amount of restructuring, I'm just gonna edit it twice.
+        # This has the nice bonus of implicitly managing users being impatient and clicking repeatedly.
+        if(refreshGuard):
+            await query.edit_message_text("🔄 Refreshing...")
+            await sleep(0.5)
         plan = self.repo.get_plan(planid)
         plan_options = self.repo.get_plan_options_with_results(planid)
         option_selector = Bot.make_option_selector_markup(plan_options, planid, int(plan["creatorUserId"]))
@@ -434,6 +445,9 @@ class Bot:
             case "s":
                 planid = int(d[1])
                 await self.start_poll(query, planid)
+            case "sr":
+                planid = int(d[1])
+                await self.start_poll(query, planid, refreshGuard=True)
             case "v":
                 planid = int(d[1])
                 optionid = int(d[2])
