@@ -266,7 +266,7 @@ class Bot:
         option_selector_list = list(map(lambda x: [InlineKeyboardButton(f'{str(x["option"])}{f" ✔*{confirmedPeopleNumber(x)}" if confirmedPeopleNumber(x) > 0 else ""}{f" ❔*{maybePeopleNumber(x)}" if maybePeopleNumber(x) > 0 else ""}', callback_data = f"v|{planid}|{x['rowid']}")], options))
         option_selector_list.append(
             [
-                InlineKeyboardButton("ℹ️ Results", callback_data = f"rrv|{userid}|{planid}"),
+                InlineKeyboardButton("❌ End", callback_data = f"rrv|{userid}|{planid}"),
                 InlineKeyboardButton("🔄 Refresh", callback_data = f"sr|{planid}"),
                 InlineKeyboardButton("🙋‍♀️ Help", callback_data="?")
             ])
@@ -309,9 +309,16 @@ class Bot:
     async def new_plan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         self.user_operations[update.effective_user.id] = f'n|{update.effective_user.id}'
         await context.bot.send_message(update.effective_chat.id, "Ok, send me the name for the plan")
+    async def full_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await context.bot.send_message(update.effective_chat.id, "I can help you select the best possible moment to organize your event, by asking people to choose the options they like and then ones they can work with if necessary.")
+        await context.bot.send_message(update.effective_chat.id, "You can create plans for a new event by sending me the /new command and I'll guide you through the creation.")
+        await context.bot.send_message(update.effective_chat.id, "You can manage your plans by sending me the /manage command. I'll give you a list of all your plans. Choose a plan to change the question, add or remove options, delete the plan or view the current results.")
+        await context.bot.send_message(update.effective_chat.id, f"You don't need to add me to any group chat. You just need to open whatever chat you want to send a poll to and type @{self.bot_name} followed by a space and select the plan you want to send. You can even start typing the question in your plan to filter your plans and select the one you need.")
+        await context.bot.send_message(update.effective_chat.id, "Once you've sent your plan to a person or a group, they'll be able to vote. Each time they click an option they will cycle between the available choices. The default is \"No\", and clicking cycles to \"Yes\", \"If necessary\" and then back to \"No\". They get a little help button that explains how to vote.")
+        await context.bot.send_message(update.effective_chat.id, "You can send each plan to as many chats as you want, but keep in mind that each one is updated separately, so if you want the counters to be up to date you may need to refresh the poll manually with the proper button. Similarly, the end button ends the poll in that specific chat, the poll will keep working in any other chat you sent it until you explicitly end it there.")
     async def done_inserting_options(self, update: Update, context: ContextTypes.DEFAULT_TYPE, planid):
         self.repo.plan_ready(planid)
-        await context.bot.send_message(update.effective_chat.id, f"Great! Your plan is ready! You can now send it to whoever you want by writing @{self.bot_name} and selecting this plan")
+        await context.bot.send_message(update.effective_chat.id, f"Great! Your plan is ready! You can now send it to whoever you want by typing @{self.bot_name} and selecting this plan")
     async def done(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         op = self.user_operations.pop(update.effective_user.id, None)
         failed_command = False
@@ -492,7 +499,7 @@ Refresh updates everything.""", show_alert=True)
         plan = self.repo.get_plan(planid)
         pressing_user_id = query.from_user.id
         if(userid != pressing_user_id):
-            await query.answer("Only the creator of this plan can show the results", show_alert=True)
+            await query.answer("Only the creator of this plan can end the poll", show_alert=True)
             return
         results = self.repo.get_answers_formatted(planid)
         final_message = f'Here are the results for "{plan["question"]}":'
@@ -551,6 +558,8 @@ Refresh updates everything.""", show_alert=True)
         self.app.add_handler(new_h)
         done_h = CommandHandler('done', self.done)
         self.app.add_handler(done_h)
+        help_h = CommandHandler('help', self.full_help)
+        self.app.add_handler(help_h)
         inline_h = InlineQueryHandler(self.inline)
         self.app.add_handler(inline_h)
         inline_b = CallbackQueryHandler(self.inline_button)
