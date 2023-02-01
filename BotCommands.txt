@@ -1,0 +1,4 @@
+help - Get a full explanation of how this bot works
+manage - Lets you manage your plans
+new - Creates a new plan
+done - Concludes the current operation
