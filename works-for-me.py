@@ -266,8 +266,9 @@ class Bot:
         option_selector_list = list(map(lambda x: [InlineKeyboardButton(f'{str(x["option"])}{f" ✔*{confirmedPeopleNumber(x)}" if confirmedPeopleNumber(x) > 0 else ""}{f" ❔*{maybePeopleNumber(x)}" if maybePeopleNumber(x) > 0 else ""}', callback_data = f"v|{planid}|{x['rowid']}")], options))
         option_selector_list.append(
             [
-                InlineKeyboardButton("ℹ️ Show full results", callback_data = f"rrv|{userid}|{planid}"),
-                InlineKeyboardButton("🔄 Refresh", callback_data = f"sr|{planid}")
+                InlineKeyboardButton("ℹ️ Results", callback_data = f"rrv|{userid}|{planid}"),
+                InlineKeyboardButton("🔄 Refresh", callback_data = f"sr|{planid}"),
+                InlineKeyboardButton("🙋‍♀️ Help", callback_data="?")
             ])
         return InlineKeyboardMarkup(option_selector_list)
     @staticmethod
@@ -375,6 +376,10 @@ class Bot:
         plan_options = self.repo.get_plan_options_with_results(planid)
         option_selector = Bot.make_option_selector_markup(plan_options, planid, int(plan["creatorUserId"]))
         await query.edit_message_text(f"{plan['question']}", reply_markup=option_selector)
+    async def show_voting_help(self, query: CallbackQuery):
+        await query.answer("""Click an option to cycle your answer. The default answer is "No" and the cycle is "Yes" ➡ "If necessary" ➡ "No". 
+A popup will state your choice when you click an option.
+Refresh updates everything.""", show_alert=True)
     async def vote(self, query: CallbackQuery, planid, optionid):
         userid = query.from_user.id
         username = query.from_user.name
@@ -455,6 +460,8 @@ class Bot:
                 planid = int(d[1])
                 optionid = int(d[2])
                 await self.vote(query, planid, optionid)
+            case "?":
+                await self.show_voting_help(query)
             case _:
                 await query.edit_message_text("We're sorry, there was an error processing your button press")
         await query.answer()
